@@ -1,8 +1,7 @@
-import { z, ZodType } from 'zod';
-import { LoginUserRequest, RegisterUserRequest } from 'src/model/user.model';
+import { z } from 'zod';
 
 export class UserValidation {
-  static REGISTER: ZodType<RegisterUserRequest> = z.object({
+  static REGISTER = z.object({
     name: z
       .string()
       .max(100)
@@ -22,7 +21,7 @@ export class UserValidation {
       .trim(),
   });
 
-  static LOGIN: ZodType<LoginUserRequest> = z.object({
+  static LOGIN = z.object({
     email: z.string().email({ message: 'Please enter a valid email' }).trim(),
     password: z
       .string()
