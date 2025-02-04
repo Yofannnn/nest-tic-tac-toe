@@ -17,13 +17,13 @@ export class AuthService {
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
-  async createAccessToken(payload: object) {
+  async createAccessToken(payload: { id: number; email: string }) {
     return await this.jwtService.signAsync(payload);
   }
 
   async verifyAccessToken(token: string) {
     try {
-      return await this.jwtService.verifyAsync(token);
+      return await this.jwtService.verifyAsync<{ id: number; email: string }>(token);
     } catch (error) {
       throw new HttpException('Invalid or expired token', 401);
     }

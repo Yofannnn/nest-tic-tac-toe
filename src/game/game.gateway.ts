@@ -2,7 +2,6 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
-  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -11,77 +10,81 @@ import { Server, Socket } from 'socket.io';
 import { Inject } from '@nestjs/common';
 import { Logger } from 'winston';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { AuthService } from 'src/auth/auth.service';
 import { GameService } from './game.service';
 
-@WebSocketGateway(0, { namespace: 'game', cors: { origin: '*' }, transports: ['websocket'] })
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer()
-  private server: Server;
+@WebSocketGateway(3002, { cors: { origin: '*', credentials: true }, transports: ['websocket'] })
+export class GameGateway implements OnGatewayConnection {
+  @WebSocketServer() private server: Server;
 
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
+    private authService: AuthService,
     private gameService: GameService,
   ) {}
 
   async handleConnection(client: Socket) {
-    this.logger.info(`Client connected: ${client.id}`);
+    try {
+      const cookie = client.request.headers.cookie;
+      if (!cookie) {
+        client.disconnect();
+        return;
+      }
 
-    const roomId = client.handshake.query.roomId as string;
-    if (!roomId) {
-      this.logger.warn(`Client ${client.id} tried to connect without roomId`);
+      const jwtPayload = await this.authService.verifyAccessToken(cookie.split('=')[1]);
+
+      client.data = { user_id: jwtPayload.id };
+    } catch (error) {
+      this.logger.error(`Error in handleConnection: ${JSON.stringify(error)}`);
       client.disconnect();
-      return;
     }
-
-    await client.join(roomId);
-    this.logger.info(`Client ${client.id} joined room ${roomId}`);
-
-    // Fetch initial game state
-    const initialState = await this.gameService.getGameState(Number(roomId));
-    client.emit('gameState', initialState);
   }
 
   @SubscribeMessage('startGame')
-  async handleStartGame(@ConnectedSocket() client: Socket, @MessageBody() { roomId }: { roomId: number }) {
-    const initialState = await this.gameService.initializeGame(roomId);
+  async handleStartGame(@MessageBody() request: { room_id: number }) {
+    try {
+      const initialState = await this.gameService.initializeGame(request.room_id);
 
-    // Notify all players
-    this.server.to(roomId.toString()).emit('gameStarted', initialState);
+      this.server.emit('gameUpdate', initialState);
+    } catch (error) {
+      this.server.emit('error', error);
+    }
+  }
+
+  @SubscribeMessage('getGameUpdate')
+  async handleGetGameUpdate(@MessageBody() request: { room_id: number }) {
+    try {
+      const gameState = await this.gameService.getGameState(request.room_id);
+
+      this.server.emit('gameUpdate', gameState);
+    } catch (error: any) {
+      this.server.emit('error', error);
+    }
   }
 
   @SubscribeMessage('makeMove')
-  async handleMove(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() request: { room_id: number; player_id: number; position: number },
-  ) {
+  async handleMove(@ConnectedSocket() client: Socket, @MessageBody() request: { room_id: number; position: number }) {
     try {
-      const gameState = await this.gameService.makeMove(request);
-
-      // Notify all players
-      this.server.to(request.room_id.toString()).emit('gameUpdate', gameState);
-    } catch (error) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      client.emit('error', error.message);
+      const player_id = client.data?.user_id as number;
+      const gameState = await this.gameService.makeMove({ ...request, player_id });
+
+      this.server.emit('gameUpdate', gameState);
+      // this.server.to(request.room_id.toString()).emit('gameUpdate', gameState);
+    } catch (error: any) {
+      this.server.emit('error', error);
     }
   }
 
   @SubscribeMessage('endGame')
-  async handleEndGame(@ConnectedSocket() client: Socket, @MessageBody() { roomId }: { roomId: number }) {
-    await this.gameService.endGame(roomId);
+  async handleEndGame(@MessageBody() request: { room_id: number }) {
+    try {
+      const gameState = await this.gameService.endGame(request.room_id);
 
-    // Notify all players and disconnect them
-    this.server.to(roomId.toString()).emit('gameEnded', { roomId });
-    this.server.socketsLeave(roomId.toString());
-  }
-
-  async handleDisconnect(client: Socket) {
-    this.logger.info(`Client disconnected: ${client.id}`);
-
-    const roomId = client.handshake.query.roomId as string;
-
-    if (roomId) {
-      await client.leave(roomId);
-      this.logger.info(`Client ${client.id} left room ${roomId}`);
+      this.server.emit('gameEnded', gameState);
+      this.server.socketsLeave(request.room_id.toString());
+    } catch (error: any) {
+      this.server.emit('error', error);
     }
   }
 }

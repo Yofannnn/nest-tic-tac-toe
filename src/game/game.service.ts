@@ -1,10 +1,10 @@
 import { Logger } from 'winston';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
-import { BadRequestException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/common/prisma.service';
 import { ValidationService } from 'src/common/validation.service';
 import { GameValidation } from './game.validation';
-import { ROOM_STATUS } from 'src/types/game.type';
+import { iResponseRoom, ROOM_STATUS } from 'src/types/game.type';
 
 @Injectable()
 export class GameService {
@@ -14,9 +14,14 @@ export class GameService {
     private prismaService: PrismaService,
   ) {}
 
-  async createRoom(request: { name: string; player1_id: number }): Promise<{ message: string }> {
+  async getRoomList() {
+    this.logger.info(`Get Room`);
+    return await this.prismaService.room.findMany({ where: { status: ROOM_STATUS.WAITING } });
+  }
+
+  async createRoom(request: { name: string; player1_id: number }): Promise<iResponseRoom> {
     this.logger.info(`Create new Room ${JSON.stringify(request)}`);
-    const createRoomRequest = this.validationService.validate(GameValidation.ROOM, request);
+    const createRoomRequest = this.validationService.validate(GameValidation.CREATEROOM, request);
 
     const newRoom = await this.prismaService.room.create({
       data: {
@@ -24,38 +29,44 @@ export class GameService {
         player1_id: createRoomRequest.player1_id,
       },
     });
-    if (!newRoom) throw new HttpException('Create room failed', 400);
 
-    return {
-      message: 'Create room success',
-    };
+    return { message: 'Create room success', data: newRoom, user_id: createRoomRequest.player1_id };
   }
 
-  async joinRoom(request: { room_id: number; player2_id: number }): Promise<{ message: string }> {
+  async joinRoom(request: { room_id: number; player2_id: number }): Promise<iResponseRoom> {
     this.logger.info(`Join Room ${JSON.stringify(request)}`);
+    const joinRoomRequest = this.validationService.validate(GameValidation.JOINROOM, request);
 
-    const room = await this.prismaService.room.findUnique({ where: { id: request.room_id } });
+    const room = await this.prismaService.room.findUnique({ where: { id: joinRoomRequest.room_id } });
     if (!room) throw new NotFoundException('Room not found.');
     if ((room.status as ROOM_STATUS) !== ROOM_STATUS.WAITING) throw new BadRequestException('Room is not available.');
-    if (room.player1_id === request.player2_id) throw new BadRequestException('Player cannot join their own room.');
+    if (room.player1_id === joinRoomRequest.player2_id) throw new BadRequestException('Player cannot join their own room.');
 
     const updatedRoom = await this.prismaService.room.update({
-      where: { id: request.room_id },
-      data: { player2_id: request.player2_id, status: ROOM_STATUS.PLAYING },
+      where: { id: joinRoomRequest.room_id },
+      data: { player2_id: joinRoomRequest.player2_id, status: ROOM_STATUS.PLAYING },
     });
-    if (!updatedRoom) throw new HttpException('Join room failed', 400);
 
-    return { message: 'Join room success' };
+    return { message: 'Join room success', data: updatedRoom, user_id: joinRoomRequest.player2_id };
   }
 
   async initializeGame(room_id: number) {
-    this.logger.info(`Initialize Game ${room_id}`);
+    this.logger.info(`Initialize Game at room ${room_id}`);
+    if (!room_id) throw new BadRequestException('Missing Room Id');
 
     const room = await this.prismaService.room.findUnique({ where: { id: room_id } });
+
     if (!room) throw new NotFoundException('Room not found.');
     if (!room.player2_id) throw new BadRequestException('Cannot start game without Player 2.');
+    if ((room.status as ROOM_STATUS) === ROOM_STATUS.FINISHED) throw new BadRequestException('Game already finished.');
 
-    return this.prismaService.gameState.create({
+    const gameState = await this.prismaService.gameState.findUnique({ where: { room_id } });
+
+    if (gameState && gameState.status === 'active') throw new BadRequestException('Game already started.');
+
+    if (gameState) await this.prismaService.gameState.delete({ where: { room_id } });
+
+    return await this.prismaService.gameState.create({
       data: {
         room_id,
         board: JSON.stringify(['', '', '', '', '', '', '', '', '']),
@@ -86,6 +97,7 @@ export class GameService {
     if (gameState.status === 'ended') throw new BadRequestException('Game already ended.');
     if (gameState.turn !== makeMoveRequest.player_id) throw new BadRequestException('Not your turn.');
     if (gameState.board[makeMoveRequest.position] !== '') throw new BadRequestException('Cell already occupied.');
+    if (gameState.winner) throw new BadRequestException('Game already ended.');
 
     // Assign 'X' to player1 and 'O' to player2
     const symbol = gameState.turn === room.player1_id ? 'X' : 'O';
@@ -95,10 +107,10 @@ export class GameService {
     if (winner) {
       gameState.status = winner === 'draw' ? 'draw' : 'ended';
       gameState.winner = winner === 'X' ? room.player1_id : room.player2_id;
-    } else {
-      // Switch turn
-      gameState.turn = gameState.turn === room.player1_id && room.player2_id ? room.player2_id : room?.player1_id;
     }
+
+    // Switch turn
+    gameState.turn = gameState.turn === room.player1_id && room.player2_id ? room.player2_id : room?.player1_id;
 
     // Update game state in DB
     await this.prismaService.gameState.update({
@@ -139,7 +151,7 @@ export class GameService {
       data: { status: ROOM_STATUS.FINISHED },
     });
 
-    return { message: 'Game ended' };
+    return { message: `Room ${room_id} was finished.` };
   }
 
   checkWinner(board: string[]): 'X' | 'O' | 'draw' | null {
