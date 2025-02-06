@@ -60,19 +60,25 @@ export class GameService {
     if (!room.player2_id) throw new BadRequestException('Cannot start game without Player 2.');
     if ((room.status as ROOM_STATUS) === ROOM_STATUS.FINISHED) throw new BadRequestException('Game already finished.');
 
+    let prevWinner: number | null = null;
+
     const gameState = await this.prismaService.gameState.findUnique({ where: { room_id } });
 
     if (gameState && gameState.status === 'active') throw new BadRequestException('Game already started.');
 
+    if (gameState?.winner) prevWinner = gameState.winner; // make first turn is the previous winner
+
     if (gameState) await this.prismaService.gameState.delete({ where: { room_id } });
 
-    return await this.prismaService.gameState.create({
+    const newGameState = await this.prismaService.gameState.create({
       data: {
         room_id,
         board: JSON.stringify(['', '', '', '', '', '', '', '', '']),
-        turn: room.player1_id,
+        turn: prevWinner || room.player1_id,
       },
     });
+
+    return { ...newGameState, board: JSON.parse(newGameState.board) as string[] };
   }
 
   async getGameState(room_id: number) {

@@ -28,6 +28,7 @@ model Room {
   player1_id  Int
   player2_id  Int?
   status      String   @default("waiting")
+  password    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -62,4 +63,13 @@ model GameMoves {
   position      Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model GameChat {
+  id          Int       @id @default(autoincrement())
+  room_id     Int
+  player_id   Int
+  message     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

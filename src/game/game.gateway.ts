@@ -41,11 +41,14 @@ export class GameGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('startGame')
-  async handleStartGame(@MessageBody() request: { room_id: number }) {
+  async handleStartGame(@ConnectedSocket() client: Socket, @MessageBody() request: { room_id: number }) {
     try {
+      await client.join(request.room_id.toString());
+      this.logger.info(`Client joined game room ${request.room_id}`);
+
       const initialState = await this.gameService.initializeGame(request.room_id);
 
-      this.server.emit('gameUpdate', initialState);
+      this.server.to(request.room_id.toString()).emit('gameUpdate', initialState);
     } catch (error) {
       this.server.emit('error', error);
     }
@@ -56,7 +59,7 @@ export class GameGateway implements OnGatewayConnection {
     try {
       const gameState = await this.gameService.getGameState(request.room_id);
 
-      this.server.emit('gameUpdate', gameState);
+      this.server.to(request.room_id.toString()).emit('gameUpdate', gameState);
     } catch (error: any) {
       this.server.emit('error', error);
     }
@@ -69,8 +72,7 @@ export class GameGateway implements OnGatewayConnection {
       const player_id = client.data?.user_id as number;
       const gameState = await this.gameService.makeMove({ ...request, player_id });
 
-      this.server.emit('gameUpdate', gameState);
-      // this.server.to(request.room_id.toString()).emit('gameUpdate', gameState);
+      this.server.to(request.room_id.toString()).emit('gameUpdate', gameState);
     } catch (error: any) {
       this.server.emit('error', error);
     }
@@ -81,7 +83,7 @@ export class GameGateway implements OnGatewayConnection {
     try {
       const gameState = await this.gameService.endGame(request.room_id);
 
-      this.server.emit('gameEnded', gameState);
+      this.server.to(request.room_id.toString()).emit('gameEnded', gameState);
       this.server.socketsLeave(request.room_id.toString());
     } catch (error: any) {
       this.server.emit('error', error);
