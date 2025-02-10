@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export class UserValidation {
+export class AuthValidation {
   static REGISTER = z.object({
     name: z
       .string()

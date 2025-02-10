@@ -3,16 +3,16 @@ import { JwtService } from '@nestjs/jwt';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 import { ValidationService } from 'src/common/validation.service';
-import { UserService } from 'src/user/user.service';
-import { UserValidation } from 'src/user/user.validation';
-import { ILoginUserRequest, IRegisterUserRequest } from 'src/types/user.type';
+import { PrismaService } from 'src/common/prisma.service';
+import { AuthValidation } from 'src/auth/auth.validation';
+import { IRequestLoginUser, IRequestRegisterUser, IResponseRegisterAndLogin } from 'src/types/user.type';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
   constructor(
     private validationService: ValidationService,
-    private userService: UserService,
+    private prismaService: PrismaService,
     private jwtService: JwtService,
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
@@ -25,32 +25,42 @@ export class AuthService {
     try {
       return await this.jwtService.verifyAsync<{ id: number; email: string }>(token);
     } catch (error) {
-      throw new HttpException('Invalid or expired token', 401);
+      throw new HttpException(error || 'Invalid or expired token', 401);
     }
   }
 
-  async register(request: IRegisterUserRequest) {
+  async register(request: IRequestRegisterUser): Promise<IResponseRegisterAndLogin> {
     this.logger.info(`Register new user ${JSON.stringify(request)}`);
-    const registerRequest = this.validationService.validate(UserValidation.REGISTER, request);
+    const registerRequest = this.validationService.validate(AuthValidation.REGISTER, request);
 
-    const isRegistered = await this.userService.getUserByEmail(registerRequest.email);
+    const isRegistered = await this.prismaService.user.findUnique({ where: { email: registerRequest.email } });
     if (isRegistered) throw new HttpException('Email already registered, please login', 400);
 
-    const user = await this.userService.createUser(registerRequest);
-    if (!user) throw new HttpException('Register failed', 400);
+    const newUser = await this.prismaService.user.create({
+      data: {
+        ...registerRequest,
+        password: await bcrypt.hash(registerRequest.password, 10),
+      },
+    });
 
     return {
       message: 'Register success, welcome',
-      user: user,
-      access_token: await this.createAccessToken({ id: user.id, email: user.email }),
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        updatedAt: newUser.updatedAt,
+        createdAt: newUser.createdAt,
+      },
+      access_token: await this.createAccessToken({ id: newUser.id, email: newUser.email }),
     };
   }
 
-  async login(request: ILoginUserRequest) {
+  async login(request: IRequestLoginUser): Promise<IResponseRegisterAndLogin> {
     this.logger.info(`Login user ${JSON.stringify(request)}`);
-    const loginRequest = this.validationService.validate(UserValidation.LOGIN, request);
+    const loginRequest = this.validationService.validate(AuthValidation.LOGIN, request);
 
-    const user = await this.userService.getUserByEmail(loginRequest.email);
+    const user = await this.prismaService.user.findUnique({ where: { email: loginRequest.email } });
     if (!user) throw new HttpException('User not found, please register first', 404);
 
     const isValid = await bcrypt.compare(loginRequest.password, user.password);
@@ -58,7 +68,13 @@ export class AuthService {
 
     return {
       message: 'Login success, welcome back',
-      user: user,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        updatedAt: user.updatedAt,
+        createdAt: user.createdAt,
+      },
       access_token: await this.createAccessToken({ id: user.id, email: user.email }),
     };
   }

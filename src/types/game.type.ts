@@ -1,27 +1,36 @@
-export interface IRoom {
+export interface IGameState {
   id: number;
-  name: string;
+  room_id: number;
+  board: string[];
+  status: string;
+  turn: number;
+  winner: number | null;
+  updatedAt: Date;
+  createdAt: Date;
+}
+
+export interface IMatchHistory {
+  id: number;
   player1_id: number;
   player2_id: number;
-  status: ROOM_STATUS;
+  createdAt: Date;
+  updatedAt: Date;
+  room_id: number;
+  player1_score: number;
+  player2_score: number;
+  duration: number;
 }
 
-export enum ROOM_STATUS {
-  WAITING = 'waiting',
-  PLAYING = 'playing',
-  FINISHED = 'finished',
-}
-
-export interface iResponseRoom {
-  message: string;
-  data: {
-    id: number;
-    name: string;
-    player1_id: number;
-    status: string;
-    player2_id: number | null;
-    createdAt: Date;
-    updatedAt: Date;
+export interface IInitializeGame {
+  initial_game: IGameState;
+  room_players: {
+    player_1: {
+      id: number;
+      name: string;
+    };
+    player_2: {
+      id: number;
+      name: string;
+    };
   };
-  user_id: number;
 }
