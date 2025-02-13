@@ -20,6 +20,12 @@ model User {
   password  String 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  conversations  UserOnConversation[]
+  sentMessages   DirectMessage[] @relation("SenderMessages")
+
+  friendsRequested Friend[] @relation("UserFriends")
+  friendsReceived  Friend[] @relation("FriendUsers")
 }
 
 model Room {
@@ -46,12 +52,13 @@ model GameState {
 
 model MatchHistory {
   id            Int      @id @default(autoincrement())
-  room_id       Int
+  room_id       Int      @unique
   player1_id    Int
   player2_id    Int
-  player1_score Int
-  player2_score Int
-  duration      Int
+  player1_score Int      @default(0)
+  player2_score Int      @default(0)
+  draw_score    Int      @default(0)
+  duration      Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -72,4 +79,54 @@ model GameChat {
   message     String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model Friend {
+  id        Int      @id @default(autoincrement())
+  user_id   Int
+  friend_id Int
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User @relation("UserFriends", fields: [user_id], references: [id], onDelete: Cascade)
+  friend User @relation("FriendUsers", fields: [friend_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, friend_id])
+}
+
+model Conversation {
+  id            Int             @id @default(autoincrement())
+  createdAt     DateTime        @default(now())
+
+  messages      DirectMessage[]
+  participants  UserOnConversation[]
+}
+
+model UserOnConversation {
+  user_id         Int
+  conversation_id Int
+  createdAt       DateTime      @default(now())
+  deleted_at      DateTime?
+
+  user            User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  conversation    Conversation  @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, conversation_id])
+  @@index([conversation_id])
+}
+
+model DirectMessage {
+  id              Int          @id @default(autoincrement())
+  conversation_id Int
+  sender_id       Int
+  message         String
+  isRead          Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender          User         @relation("SenderMessages", fields: [sender_id], references: [id], onDelete: Cascade)
+
+  @@index([conversation_id])
 }
