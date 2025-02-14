@@ -90,7 +90,7 @@ export class GameService {
     this.logger.info(`Get Game History at room ${room_id}`);
     if (!room_id) throw new BadRequestException('Missing Room Id.');
 
-    const matchHistory = await this.prismaService.matchHistory.findFirst({ where: { room_id } });
+    const matchHistory = await this.prismaService.matchHistory.findUnique({ where: { room_id } });
 
     return matchHistory;
   }
@@ -120,11 +120,12 @@ export class GameService {
       gameState.status = winner === 'draw' ? 'draw' : 'ended';
       gameState.winner = winner === 'X' ? room.player1_id : room.player2_id;
 
-      await this.prismaService.matchHistory.updateMany({
+      await this.prismaService.matchHistory.update({
         where: { room_id: makeMoveRequest.room_id },
         data: {
           player1_score: { increment: winner === 'X' ? 1 : 0 },
           player2_score: { increment: winner === 'O' ? 1 : 0 },
+          draw_score: { increment: winner === 'draw' ? 1 : 0 },
         },
       });
     }

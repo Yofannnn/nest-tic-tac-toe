@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Patch, Post } from '@nestjs/common';
 import { RoomService } from './room.service';
 import { AuthService } from 'src/auth/auth.service';
 
@@ -27,21 +27,8 @@ export class RoomController {
     return await this.roomService.joinRoom(payload);
   }
 
-  @Delete('/delete/:room_id')
-  async deleteRoom(@Headers('cookie') cookie: string, @Param('room_id') room_id: string) {
-    const jwtPayload = await this.authService.verifyAccessToken(cookie.split('=')[1]);
-    const player1_id = jwtPayload.id;
-
-    return this.roomService.deleteRoom(Number(room_id), player1_id);
-  }
-
   @Get()
   async roomList() {
     return await this.roomService.getRoomsWaiting();
-  }
-
-  @Get('/match-history:room_id')
-  async getMacthHistory(@Body() request: { room_id: number }) {
-    return this.roomService.getMatchHistoryByRoomId(request.room_id);
   }
 }

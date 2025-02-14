@@ -86,12 +86,13 @@ export class RoomService {
     if (!room) throw new NotFoundException('Room not found.');
     if (!room.player2_id) {
       await this.prismaService.room.delete({ where: { id: room_id } });
+      await this.prismaService.gameChat.deleteMany({ where: { room_id } });
       return { message: `Room ${room_id} was deleted.` };
     }
 
     if (room.player1_id !== player_id && room.player2_id !== player_id) throw new BadRequestException('Player not in room.');
 
-    const matchHistory = await this.prismaService.matchHistory.findFirst({ where: { room_id } });
+    const matchHistory = await this.prismaService.matchHistory.findUnique({ where: { room_id } });
 
     await this.prismaService.gameState.delete({ where: { room_id } });
 
@@ -100,28 +101,11 @@ export class RoomService {
       data: { status: ROOM_STATUS.FINISHED },
     });
 
-    const updatedMatchHistory = await this.prismaService.matchHistory.updateManyAndReturn({
+    const updatedMatchHistory = await this.prismaService.matchHistory.update({
       where: { room_id },
       data: { duration: new Date().getTime() - new Date(matchHistory?.createdAt as Date).getTime() },
     });
 
-    return { message: `Room ${room_id} was finished.`, match_history: updatedMatchHistory[0] };
-  }
-
-  async deleteRoom(room_id: number, player_id: number) {
-    this.logger.warn(`Delete Room ${room_id}`);
-
-    const room = await this.prismaService.room.findUnique({ where: { id: room_id } });
-
-    if (room?.player1_id !== player_id && !room?.player2_id)
-      throw new BadRequestException('Player not allowed to delete this room');
-
-    await this.prismaService.gameChat.deleteMany({ where: { room_id } });
-
-    return await this.prismaService.room.delete({ where: { id: room_id } });
-  }
-
-  async getMatchHistoryByRoomId(room_id: number) {
-    return await this.prismaService.matchHistory.findFirst({ where: { room_id } });
+    return { message: `Room ${room_id} was finished.`, match_history: updatedMatchHistory };
   }
 }

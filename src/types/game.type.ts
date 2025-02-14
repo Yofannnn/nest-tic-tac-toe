@@ -18,7 +18,8 @@ export interface IMatchHistory {
   room_id: number;
   player1_score: number;
   player2_score: number;
-  duration: number;
+  draw_score: number;
+  duration: number | null;
 }
 
 export interface IInitializeGame {
