@@ -2,7 +2,7 @@ import { Logger } from 'winston';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Inject, Injectable } from '@nestjs/common';
 import { ValidationService } from 'src/common/validation.service';
-import { GameChatValidation } from './chat.validation';
+import { GameChatValidation } from './game-chat.validation';
 import { PrismaService } from 'src/common/prisma.service';
 
 @Injectable()

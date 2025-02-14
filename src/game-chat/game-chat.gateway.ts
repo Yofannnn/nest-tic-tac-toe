@@ -10,15 +10,15 @@ import { Inject } from '@nestjs/common';
 import { Logger } from 'winston';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Server, Socket } from 'socket.io';
-import { AuthService } from 'src/auth/auth.service';
 import { GameChatService } from './game-chat.service';
+import { AuthService } from 'src/auth/auth.service';
 
 @WebSocketGateway(3002, { cors: { origin: '*', credentials: true }, transports: ['websocket'] })
 export class GameChatGateway implements OnGatewayConnection {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
-    private authService: AuthService,
     private gameChatService: GameChatService,
+    private authService: AuthService,
   ) {}
 
   @WebSocketServer()
