@@ -14,19 +14,44 @@ export class FriendService {
   async getFriends(userId: number): Promise<IResponseGetFriends[]> {
     this.logger.info(`Fetching friends for user ${userId}`);
 
-    const friends = await this.prismaService.friend.findMany({
+    const relationships = await this.prismaService.friend.findMany({
       where: {
         OR: [{ user_id: userId }, { friend_id: userId }],
         status: FRIEND_STATUS.ACCEPTED,
       },
-      include: { friend: true },
+      include: { user: true, friend: true },
     });
 
-    return friends.map((friend) => ({
-      id: friend.friend.id,
-      name: friend.friend.name,
-      createdAt: friend.friend.createdAt,
-      updatedAt: friend.friend.updatedAt,
+    return relationships.map((relationship) => {
+      return relationship.user.id === userId
+        ? {
+            id: relationship.friend.id,
+            name: relationship.friend.name,
+            createdAt: relationship.friend.createdAt,
+            updatedAt: relationship.friend.updatedAt,
+          }
+        : {
+            id: relationship.user.id,
+            name: relationship.user.name,
+            createdAt: relationship.user.createdAt,
+            updatedAt: relationship.user.updatedAt,
+          };
+    });
+  }
+
+  async getPending(userId: number): Promise<IResponseGetFriends[]> {
+    this.logger.info(`Fetching pending friend requests for user ${userId}`);
+
+    const requests = await this.prismaService.friend.findMany({
+      where: { friend_id: userId, status: FRIEND_STATUS.PENDING },
+      include: { user: true },
+    });
+
+    return requests.map((friend) => ({
+      id: friend.user.id,
+      name: friend.user.name,
+      createdAt: friend.user.createdAt,
+      updatedAt: friend.user.updatedAt,
     }));
   }
 

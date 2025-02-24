@@ -43,7 +43,7 @@ export class DirectMessageGateWay implements OnGatewayConnection {
     }
   }
 
-  @SubscribeMessage('sendMessage')
+  @SubscribeMessage('sendDirectMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() request: { friend_id: number; message: string },
@@ -51,8 +51,21 @@ export class DirectMessageGateWay implements OnGatewayConnection {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const player_id = client.data?.user_id as number;
 
+    await client.join(player_id.toString());
+
     const newMessage = await this.directMessageService.sendMessage(player_id, request.friend_id, request.message);
 
-    this.server.to(request.friend_id.toString()).emit('newMessage', newMessage);
+    this.server.to(player_id.toString()).emit('newDirectMessage', newMessage);
+  }
+
+  @SubscribeMessage('readMessage')
+  async handleReadMessages(@ConnectedSocket() client: Socket, @MessageBody() request: { sender_id: number }) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const player_id = client.data?.user_id as number;
+
+    await client.join(player_id.toString());
+
+    const readMessage = await this.directMessageService.readMessage(request.sender_id, player_id);
+    this.server.to(player_id.toString()).emit('readedMessage', readMessage);
   }
 }

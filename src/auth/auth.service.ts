@@ -29,6 +29,20 @@ export class AuthService {
     }
   }
 
+  async getUserProfile(id: number) {
+    this.logger.info(`Get user profile ${id}`);
+    const user = await this.prismaService.user.findUnique({ where: { id } });
+    if (!user) throw new HttpException('User not found', 404);
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
   async register(request: IRequestRegisterUser): Promise<IResponseRegisterAndLogin> {
     this.logger.info(`Register new user ${JSON.stringify(request)}`);
     const registerRequest = this.validationService.validate(AuthValidation.REGISTER, request);

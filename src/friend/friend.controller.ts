@@ -16,6 +16,13 @@ export class FriendController {
     return await this.friendService.getFriends(jwtPayload.id);
   }
 
+  @Get('/pending')
+  async getPending(@Headers('cookie') cookie: string) {
+    const jwtPayload = await this.authService.verifyAccessToken(cookie.split('=')[1]);
+
+    return await this.friendService.getPending(jwtPayload.id);
+  }
+
   @Post('/add')
   async addFriend(@Headers('cookie') cookie: string, @Body() request: { friend_id: number }) {
     const jwtPayload = await this.authService.verifyAccessToken(cookie.split('=')[1]);
@@ -27,7 +34,7 @@ export class FriendController {
   async acceptFriend(@Headers('cookie') cookie: string, @Body() request: { friend_id: number }) {
     const jwtPayload = await this.authService.verifyAccessToken(cookie.split('=')[1]);
 
-    return await this.friendService.acceptFriend(jwtPayload.id, request.friend_id);
+    return await this.friendService.acceptFriend(request.friend_id, jwtPayload.id);
   }
 
   @Delete('/reject')

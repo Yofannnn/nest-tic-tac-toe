@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { PrismaService } from 'src/common/prisma.service';
+import { IResponseGetDirectMessages, IResponseGetUserConversations } from 'src/types/direct-message.type';
 import { Logger } from 'winston';
 
 @Injectable()
@@ -10,8 +11,8 @@ export class DirectMessageService {
     private prismaService: PrismaService,
   ) {}
 
-  async getUserConversations(userId: number) {
-    return await this.prismaService.conversation.findMany({
+  async getUserConversations(userId: number): Promise<IResponseGetUserConversations> {
+    const conversations = await this.prismaService.conversation.findMany({
       where: {
         participants: {
           some: { user_id: userId, deleted_at: null },
@@ -25,9 +26,15 @@ export class DirectMessageService {
         participants: true,
       },
     });
+
+    return {
+      user_id: userId,
+      message: 'Successfully get user conversations',
+      conversations,
+    };
   }
 
-  async getMessages(user_id: number, friend_id: number) {
+  async getMessages(user_id: number, friend_id: number): Promise<IResponseGetDirectMessages> {
     this.logger.info(`Get message ${user_id} with ${friend_id}`);
 
     const conversation = await this.prismaService.conversation.findFirst({
@@ -36,14 +43,26 @@ export class DirectMessageService {
       },
     });
 
-    if (!conversation) throw new BadRequestException('');
+    const friend = await this.prismaService.user.findUnique({ where: { id: friend_id } });
 
-    return await this.prismaService.directMessage.findMany({
+    if (!conversation || !friend) throw new BadRequestException('You have no conversation with this user.');
+
+    const direct_messages = await this.prismaService.directMessage.findMany({
       where: {
         conversation_id: conversation.id,
       },
       orderBy: { createdAt: 'asc' },
     });
+
+    return {
+      direct_messages,
+      friend: {
+        id: friend.id,
+        name: friend.name,
+        createdAt: friend.createdAt,
+        updatedAt: friend.updatedAt,
+      },
+    };
   }
 
   async sendMessage(senderId: number, receiverId: number, messageText: string) {
@@ -70,6 +89,25 @@ export class DirectMessageService {
     });
 
     return message;
+  }
+
+  async readMessage(senderId: number, receiverId: number) {
+    this.logger.info(`Read message from ${senderId} to ${receiverId}`);
+
+    const conversation = await this.prismaService.conversation.findFirst({
+      where: { participants: { every: { user_id: { in: [senderId, receiverId] } } } },
+    });
+
+    if (!conversation) throw new BadRequestException('You have no conversation with this user.');
+
+    return await this.prismaService.directMessage.updateManyAndReturn({
+      where: {
+        conversation_id: conversation.id,
+        sender_id: senderId,
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
   }
 
   async deleteChatForUser(userId: number, friend_id: number) {
